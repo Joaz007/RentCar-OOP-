@@ -2,33 +2,44 @@ package GUI;
 
 import Modelo.*;
 import Calculos.*;
-import Exceptions.LocacaoException;
-
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.ArrayList;
 import java.util.List;
 
 public class PrincipalGUI extends JFrame {
+    private List<Cliente> clientes = new ArrayList<>();
+    private List<Carro> carros = new ArrayList<>();
 
     public PrincipalGUI() {
         configurarJanela();
+        inicializarDados();
         adicionarAbas();
         exibirJanela();
     }
 
     private void configurarJanela() {
         setTitle("Sistema de Locação de Carros");
-        setSize(800, 600);
+        setSize(1000, 700);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
     }
 
+    private void inicializarDados() {
+        carros.add(new Carro(1, "Fiat Uno", "AAA-1111", 2020, 100));
+        carros.add(new Carro(2, "VW Gol", "BBB-2222", 2021, 150));
+        carros.add(new Carro(3, "Chevrolet Onix", "CCC-3333", 2022, 200));
+    }
+
     private void adicionarAbas() {
         JTabbedPane abas = new JTabbedPane();
-        abas.addTab("Nova Locação", new LocacaoPanel());
-        abas.addTab("Clientes", new ClientesPanel());
-        abas.addTab("Carros", new CarrosPanel());
+        abas.addTab("Operações", new OperacoesPanel(clientes, carros));
+        abas.addTab("Clientes", new ClientesPanel(clientes));
+        abas.addTab("Carros", new CarrosPanel(carros));
+        abas.addTab("Controle", new FuncionarioPanel(clientes));
         add(abas);
     }
 
@@ -40,213 +51,366 @@ public class PrincipalGUI extends JFrame {
         SwingUtilities.invokeLater(PrincipalGUI::new);
     }
 
-    // -----------------------------
-    // LocacaoPanel: Fluxo de Aluguel
-    // -----------------------------
-    private static class LocacaoPanel extends JPanel {
-        private CardLayout cardLayout = new CardLayout();
-        private JPanel cards = new JPanel(cardLayout);
-
-        // Variáveis para armazenar dados durante o fluxo
-        private Cliente currentCliente;
-        private Carro selectedCarro;
-        private List<Cliente> clientes = new ArrayList<>();
-        private List<Carro> carros = new ArrayList<>();
-        private JTextField txtDataInicio, txtDataFim;
-
-        public LocacaoPanel() {
-            // Inicializa três carros fictícios
-            carros.add(new Carro(1, "Carro 1", "AAA-1111", 2020, 100));
-            carros.add(new Carro(2, "Carro 2", "BBB-2222", 2021, 150));
-            carros.add(new Carro(3, "Carro 3", "CCC-3333", 2022, 200));
-
-            setLayout(new BorderLayout());
-            add(cards, BorderLayout.CENTER);
-            criarPassos();
-            cardLayout.show(cards, "entrar");
+    private static class OperacoesPanel extends JPanel {
+        public OperacoesPanel(List<Cliente> clientes, List<Carro> carros) {
+            setLayout(new GridLayout(2, 1, 10, 10));
+            JButton btnLocacao = new JButton("Nova Locação");
+            JButton btnDevolucao = new JButton("Devolução de Veículo");
+            
+            btnLocacao.addActionListener(e -> new LocacaoPanel(clientes, carros));
+            btnDevolucao.addActionListener(e -> new DevolucaoDialog(clientes));
+            
+            add(btnLocacao);
+            add(btnDevolucao);
         }
+    }
 
-        private void criarPassos() {
-            // --- Passo 1: Tela de "Entrar" ---
-            JPanel panelEntrar = new JPanel(new BorderLayout());
-            JButton btnEntrar = new JButton("Entrar");
-            btnEntrar.addActionListener(e -> cardLayout.show(cards, "clienteChoice"));
-            panelEntrar.add(new JLabel("Clique em Entrar para iniciar o aluguel", SwingConstants.CENTER), BorderLayout.CENTER);
-            panelEntrar.add(btnEntrar, BorderLayout.SOUTH);
-            cards.add(panelEntrar, "entrar");
+    private static class DevolucaoDialog extends JDialog {
+        public DevolucaoDialog(List<Cliente> clientes) {
+            setTitle("Devolução de Veículo");
+            setSize(500, 400);
+            setModal(true);
+            
+            DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Cliente", "Carro", "Placa"}, 0);
+            JTable tabela = new JTable(model);
+            
+            for (Cliente c : clientes) {
+                for (Locacao l : c.consultarHistorico()) {
+                    if (!l.isDevolvido()) {
+                        model.addRow(new Object[]{l.getId(), c.getNome(), l.getCarro().getModelo(), l.getCarro().getPlaca()});
+                    }
+                }
+            }
+            
+            JButton btnDevolver = new JButton("Confirmar Devolução");
+            btnDevolver.addActionListener(e -> {
+                int linha = tabela.getSelectedRow();
+                if (linha != -1) {
+                    int idLocacao = (int) model.getValueAt(linha, 0);
+                    for (Cliente c : clientes) {
+                        for (Locacao l : c.consultarHistorico()) {
+                            if (l.getId() == idLocacao) {
+                                l.devolverCarro();
+                                JOptionPane.showMessageDialog(this, "Devolução registrada com sucesso!");
+                                dispose();
+                                return;
+                            }
+                        }
+                    }
+                }
+            });
+            
+            JPanel content = new JPanel(new BorderLayout());
+            content.add(new JScrollPane(tabela), BorderLayout.CENTER);
+            content.add(btnDevolver, BorderLayout.SOUTH);
+            add(content);
+            setVisible(true);
+        }
+    }
 
-            // --- Passo 2: Escolha entre Cliente Existente ou Novo ---
-            JPanel panelClienteChoice = new JPanel(new GridLayout(3, 1, 10, 10));
-            JButton btnClienteExistente = new JButton("Cliente Existente");
-            JButton btnNovoCliente = new JButton("Novo Cliente");
-            panelClienteChoice.add(new JLabel("Selecione Cliente Existente ou Novo Cliente", SwingConstants.CENTER));
-            panelClienteChoice.add(btnClienteExistente);
-            panelClienteChoice.add(btnNovoCliente);
-            btnNovoCliente.addActionListener(e -> cardLayout.show(cards, "novoCliente"));
-            btnClienteExistente.addActionListener(e -> cardLayout.show(cards, "clienteExistente"));
-            cards.add(panelClienteChoice, "clienteChoice");
+    private static class FuncionarioPanel extends JPanel {
+        public FuncionarioPanel(List<Cliente> clientes) {
+            setLayout(new BorderLayout());
+            String[] colunas = {"Cliente", "Carro", "Placa", "Data Locação", "Data Devolução", "Status"};
+            DefaultTableModel model = new DefaultTableModel(colunas, 0);
+            JTable tabela = new JTable(model);
+            
+            JButton btnAtualizar = new JButton("Atualizar");
+            btnAtualizar.addActionListener(e -> atualizarTabela(clientes, model));
+            
+            JPanel painelBotoes = new JPanel();
+            painelBotoes.add(btnAtualizar);
+            
+            add(new JScrollPane(tabela), BorderLayout.CENTER);
+            add(painelBotoes, BorderLayout.SOUTH);
+            atualizarTabela(clientes, model);
+        }
+        
+        private void atualizarTabela(List<Cliente> clientes, DefaultTableModel model) {
+            model.setRowCount(0);
+            SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+            for (Cliente c : clientes) {
+                for (Locacao l : c.consultarHistorico()) {
+                    model.addRow(new Object[]{
+                        c.getNome(),
+                        l.getCarro().getModelo(),
+                        l.getCarro().getPlaca(),
+                        sdf.format(l.getDataInicio()),
+                        l.isDevolvido() ? sdf.format(l.getDataDevolucao()) : "Pendente",
+                        l.isDevolvido() ? "Devolvido" : "Em aberto"
+                    });
+                }
+            }
+        }
+    }
 
-            // --- Passo 3a: Cadastro de Novo Cliente ---
-            JPanel panelNovoCliente = new JPanel(new GridLayout(5, 2, 5, 5));
+    private static class ClientesPanel extends JPanel {
+        private DefaultTableModel model;
+        
+        public ClientesPanel(List<Cliente> clientes) {
+            setLayout(new BorderLayout());
+            JPanel formulario = new JPanel(new GridLayout(4, 2, 5, 5));
             JTextField txtNome = new JTextField();
             JTextField txtCpf = new JTextField();
             JTextField txtEmail = new JTextField();
-            panelNovoCliente.add(new JLabel("Nome:"));
-            panelNovoCliente.add(txtNome);
-            panelNovoCliente.add(new JLabel("CPF:"));
-            panelNovoCliente.add(txtCpf);
-            panelNovoCliente.add(new JLabel("Email:"));
-            panelNovoCliente.add(txtEmail);
-            JButton btnCadastrar = new JButton("Cadastrar");
-            JButton btnVoltarNovo = new JButton("Voltar");
-            panelNovoCliente.add(btnCadastrar);
-            panelNovoCliente.add(btnVoltarNovo);
-            btnCadastrar.addActionListener(e -> {
+            
+            formulario.add(new JLabel("Nome:"));
+            formulario.add(txtNome);
+            formulario.add(new JLabel("CPF:"));
+            formulario.add(txtCpf);
+            formulario.add(new JLabel("Email:"));
+            formulario.add(txtEmail);
+            
+            JButton btnAdicionar = new JButton("Cadastrar Cliente");
+            formulario.add(btnAdicionar);
+            
+            model = new DefaultTableModel(new String[]{"ID", "Nome", "CPF", "Email"}, 0);
+            JTable tabela = new JTable(model);
+            
+            btnAdicionar.addActionListener(e -> {
                 if (txtNome.getText().isEmpty() || txtCpf.getText().isEmpty() || txtEmail.getText().isEmpty()) {
                     JOptionPane.showMessageDialog(this, "Preencha todos os campos!");
                     return;
                 }
-                currentCliente = new Cliente(clientes.size() + 1, txtNome.getText(), txtCpf.getText(), txtEmail.getText());
-                clientes.add(currentCliente);
-                JOptionPane.showMessageDialog(this, "Cliente cadastrado com sucesso!");
-                cardLayout.show(cards, "selecionarCarro");
+                Cliente novo = new Cliente(clientes.size() + 1, txtNome.getText(), txtCpf.getText(), txtEmail.getText());
+                clientes.add(novo);
+                model.addRow(new Object[]{novo.getId(), novo.getNome(), novo.getCpf(), novo.getEmail()});
+                txtNome.setText("");
+                txtCpf.setText("");
+                txtEmail.setText("");
             });
-            btnVoltarNovo.addActionListener(e -> cardLayout.show(cards, "clienteChoice"));
-            cards.add(panelNovoCliente, "novoCliente");
+            
+            add(formulario, BorderLayout.NORTH);
+            add(new JScrollPane(tabela), BorderLayout.CENTER);
+        }
+    }
 
-            // --- Passo 3b: Buscar Cliente Existente pelo CPF ---
-            JPanel panelClienteExistente = new JPanel(new BorderLayout());
-            JPanel panelBusca = new JPanel(new FlowLayout());
-            JTextField txtBuscaCpf = new JTextField(15);
-            JButton btnBuscar = new JButton("Buscar");
-            panelBusca.add(new JLabel("Digite o CPF:"));
-            panelBusca.add(txtBuscaCpf);
-            panelBusca.add(btnBuscar);
-            panelClienteExistente.add(panelBusca, BorderLayout.CENTER);
-            JButton btnVoltarExistente = new JButton("Voltar");
-            panelClienteExistente.add(btnVoltarExistente, BorderLayout.SOUTH);
-            btnVoltarExistente.addActionListener(e -> cardLayout.show(cards, "clienteChoice"));
-            btnBuscar.addActionListener(e -> {
-                String cpfBusca = txtBuscaCpf.getText();
-                currentCliente = null;
-                for (Cliente c : clientes) {
-                    if (c.getCpf().equals(cpfBusca)) {
-                        currentCliente = c;
-                        break;
-                    }
-                }
-                if (currentCliente == null) {
-                    JOptionPane.showMessageDialog(this, "Cliente não encontrado! Por favor, cadastre um novo cliente.");
-                    cardLayout.show(cards, "clienteChoice");
-                } else {
-                    JOptionPane.showMessageDialog(this, "Cliente encontrado: " + currentCliente.getNome());
-                    cardLayout.show(cards, "selecionarCarro");
-                }
-            });
-            cards.add(panelClienteExistente, "clienteExistente");
-
-            // --- Passo 4: Seleção do Carro ---
-            JPanel panelSelecionarCarro = new JPanel(new BorderLayout());
-            JPanel panelCarros = new JPanel(new GridLayout(1, 3, 10, 10));
-            for (Carro carro : carros) {
-                JButton btnCarro = new JButton("<html>" + carro.getModelo() + "<br>R$" + carro.getValorDiaria() + "</html>");
-                btnCarro.addActionListener(e -> {
-                    selectedCarro = carro;
-                    if (!carro.verificarDisponibilidade()) {
-                        JOptionPane.showMessageDialog(this, "Carro não disponível. Selecione outro.");
-                    } else {
-                        cardLayout.show(cards, "definirDatas");
-                    }
-                });
-                panelCarros.add(btnCarro);
-            }
-            JButton btnCancelarCarro = new JButton("Cancelar");
-            btnCancelarCarro.addActionListener(e -> cardLayout.show(cards, "clienteChoice"));
-            panelSelecionarCarro.add(new JLabel("Selecione o Carro desejado:", SwingConstants.CENTER), BorderLayout.NORTH);
-            panelSelecionarCarro.add(panelCarros, BorderLayout.CENTER);
-            panelSelecionarCarro.add(btnCancelarCarro, BorderLayout.SOUTH);
-            cards.add(panelSelecionarCarro, "selecionarCarro");
-
-            // --- Passo 5: Definir Datas da Locação ---
-            JPanel panelDefinirDatas = new JPanel(new GridLayout(4, 2, 5, 5));
-            txtDataInicio = new JTextField("dd/mm/yyyy");
-            txtDataFim = new JTextField("dd/mm/yyyy");
-            panelDefinirDatas.add(new JLabel("Data de Início:"));
-            panelDefinirDatas.add(txtDataInicio);
-            panelDefinirDatas.add(new JLabel("Data de Fim:"));
-            panelDefinirDatas.add(txtDataFim);
-            JButton btnAvancarData = new JButton("Avançar para Pagamento");
-            JButton btnVoltarDatas = new JButton("Voltar");
-            panelDefinirDatas.add(btnAvancarData);
-            panelDefinirDatas.add(btnVoltarDatas);
-            btnAvancarData.addActionListener(e -> {
+    private static class CarrosPanel extends JPanel {
+        public CarrosPanel(List<Carro> carros) {
+            setLayout(new BorderLayout());
+            JPanel formulario = new JPanel(new GridLayout(5, 2, 5, 5));
+            JTextField txtModelo = new JTextField();
+            JTextField txtPlaca = new JTextField();
+            JTextField txtAno = new JTextField();
+            JTextField txtDiaria = new JTextField();
+            
+            formulario.add(new JLabel("Modelo:"));
+            formulario.add(txtModelo);
+            formulario.add(new JLabel("Placa:"));
+            formulario.add(txtPlaca);
+            formulario.add(new JLabel("Ano:"));
+            formulario.add(txtAno);
+            formulario.add(new JLabel("Diária:"));
+            formulario.add(txtDiaria);
+            
+            JButton btnAdicionar = new JButton("Adicionar Carro");
+            formulario.add(btnAdicionar);
+            
+            DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Modelo", "Placa", "Ano", "Diária", "Disponível"}, 0);
+            JTable tabela = new JTable(model);
+            
+            btnAdicionar.addActionListener(e -> {
                 try {
-                    // Conversão simples do formato dd/mm/yyyy para Date
-                    String[] inicio = txtDataInicio.getText().split("/");
-                    String[] fim = txtDataFim.getText().split("/");
-                    int di = Integer.parseInt(inicio[0]);
-                    int mi = Integer.parseInt(inicio[1]);
-                    int ai = Integer.parseInt(inicio[2]);
-                    int df = Integer.parseInt(fim[0]);
-                    int mf = Integer.parseInt(fim[1]);
-                    int af = Integer.parseInt(fim[2]);
-                    java.util.Calendar calInicio = java.util.Calendar.getInstance();
-                    calInicio.set(ai, mi - 1, di);
-                    java.util.Calendar calFim = java.util.Calendar.getInstance();
-                    calFim.set(af, mf - 1, df);
-                    if (calFim.getTime().before(calInicio.getTime())) {
-                        JOptionPane.showMessageDialog(this, "Data de fim não pode ser antes da data de início.");
+                    Carro novo = new Carro(
+                        carros.size() + 1,
+                        txtModelo.getText(),
+                        txtPlaca.getText(),
+                        Integer.parseInt(txtAno.getText()),
+                        Double.parseDouble(txtDiaria.getText())
+                    );
+                    carros.add(novo);
+                    model.addRow(new Object[]{
+                        novo.getId(),
+                        novo.getModelo(),
+                        novo.getPlaca(),
+                        novo.getAno(),
+                        "R$ " + novo.getValorDiaria(),
+                        novo.isDisponivel() ? "Sim" : "Não"
+                    });
+                    txtModelo.setText("");
+                    txtPlaca.setText("");
+                    txtAno.setText("");
+                    txtDiaria.setText("");
+                } catch (NumberFormatException ex) {
+                    JOptionPane.showMessageDialog(this, "Valores inválidos!");
+                }
+            });
+            
+            add(formulario, BorderLayout.NORTH);
+            add(new JScrollPane(tabela), BorderLayout.CENTER);
+        }
+    }
+
+    private static class LocacaoPanel extends JDialog {
+        private static int proximoId = 1;
+        
+        public LocacaoPanel(List<Cliente> clientes, List<Carro> carros) {
+            setTitle("Nova Locação");
+            setSize(800, 600);
+            setModal(true);
+            
+            CardLayout cardLayout = new CardLayout();
+            JPanel cards = new JPanel(cardLayout);
+            Cliente[] currentCliente = new Cliente[1];
+            Carro[] selectedCarro = new Carro[1];
+            
+            cards.add(criarPanelCliente(clientes, cards, currentCliente), "cliente");
+            cards.add(criarPanelCarro(carros, cards, selectedCarro), "carro");
+            cards.add(criarPanelDatas(cards, currentCliente, selectedCarro), "datas");
+            
+            cardLayout.show(cards, "cliente");
+            add(cards);
+            setVisible(true);
+        }
+        
+        private JPanel criarPanelCliente(List<Cliente> clientes, JPanel cards, Cliente[] currentCliente) {
+            JPanel panel = new JPanel(new BorderLayout());
+            DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Nome", "CPF"}, 0);
+            
+            for (Cliente c : clientes) {
+                model.addRow(new Object[]{c.getId(), c.getNome(), c.getCpf()});
+            }
+            
+            JTable tabela = new JTable(model);
+            JButton btnNovo = new JButton("Novo Cliente");
+            JButton btnProximo = new JButton("Selecionar e Prosseguir");
+            
+            btnNovo.addActionListener(e -> new NovoClienteDialog(clientes, model));
+            btnProximo.addActionListener(e -> {
+                int linha = tabela.getSelectedRow();
+                if (linha != -1) {
+                    currentCliente[0] = clientes.get(linha);
+                    ((CardLayout) cards.getLayout()).show(cards, "carro");
+                }
+            });
+            
+            JPanel botoes = new JPanel();
+            botoes.add(btnNovo);
+            botoes.add(btnProximo);
+            
+            panel.add(new JScrollPane(tabela), BorderLayout.CENTER);
+            panel.add(botoes, BorderLayout.SOUTH);
+            return panel;
+        }
+        
+        private JPanel criarPanelCarro(List<Carro> carros, JPanel cards, Carro[] selectedCarro) {
+            JPanel panel = new JPanel(new BorderLayout());
+            DefaultTableModel model = new DefaultTableModel(new String[]{"ID", "Modelo", "Placa", "Diária", "Disponível"}, 0);
+            
+            for (Carro c : carros) {
+                model.addRow(new Object[]{c.getId(), c.getModelo(), c.getPlaca(), "R$ " + c.getValorDiaria(), c.isDisponivel() ? "Sim" : "Não"});
+            }
+            
+            JTable tabela = new JTable(model);
+            JButton btnVoltar = new JButton("Voltar");
+            JButton btnProximo = new JButton("Selecionar e Prosseguir");
+            
+            btnVoltar.addActionListener(e -> ((CardLayout) cards.getLayout()).show(cards, "cliente"));
+            btnProximo.addActionListener(e -> {
+                int linha = tabela.getSelectedRow();
+                if (linha != -1) {
+                    selectedCarro[0] = carros.get(linha);
+                    if (selectedCarro[0].isDisponivel()) {
+                        ((CardLayout) cards.getLayout()).show(cards, "datas");
+                    } else {
+                        JOptionPane.showMessageDialog(LocacaoPanel.this, "Carro indisponível!");
+                    }
+                }
+            });
+            
+            JPanel botoes = new JPanel();
+            botoes.add(btnVoltar);
+            botoes.add(btnProximo);
+            
+            panel.add(new JScrollPane(tabela), BorderLayout.CENTER);
+            panel.add(botoes, BorderLayout.SOUTH);
+            return panel;
+        }
+        
+        private JPanel criarPanelDatas(JPanel cards, Cliente[] currentCliente, Carro[] selectedCarro) {
+            JPanel panel = new JPanel(new GridLayout(5, 2, 10, 10));
+            JTextField txtInicio = new JTextField("dd/mm/aaaa");
+            JTextField txtFim = new JTextField("dd/mm/aaaa");
+            JButton btnVoltar = new JButton("Voltar");
+            JButton btnFinalizar = new JButton("Finalizar Locação");
+            
+            btnVoltar.addActionListener(e -> ((CardLayout) cards.getLayout()).show(cards, "carro"));
+            btnFinalizar.addActionListener(e -> {
+                try {
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy");
+                    Date inicio = sdf.parse(txtInicio.getText());
+                    Date fim = sdf.parse(txtFim.getText());
+                    
+                    if (fim.before(inicio)) {
+                        JOptionPane.showMessageDialog(LocacaoPanel.this, "Data final deve ser após a data inicial!");
                         return;
                     }
-                    // Cria a locação utilizando a estratégia CalculoNormal
-                    Locacao locacao = new Locacao(1, calInicio.getTime(), calFim.getTime(), currentCliente, selectedCarro, new CalculoNormal());
+                    
+                    Locacao locacao = new Locacao(
+                        proximoId++,
+                        inicio,
+                        fim,
+                        currentCliente[0],
+                        selectedCarro[0],
+                        new CalculoNormal()
+                    );
+                    
                     locacao.calcularValorTotal();
-                    // Exibe o resumo e solicita confirmação
-                    String resumo = "Cliente: " + currentCliente.getNome() +
-                            "\nCarro: " + selectedCarro.getModelo() +
-                            "\nData: " + txtDataInicio.getText() + " até " + txtDataFim.getText() +
-                            "\nValor Total: R$" + locacao.getValorTotal();
-                    int confirm = JOptionPane.showConfirmDialog(this, resumo + "\n\nConfirmar aluguel?", "Pagamento", JOptionPane.YES_NO_OPTION);
-                    if (confirm == JOptionPane.YES_OPTION) {
-                        locacao.finalizarLocacao();
-                        try {
-                            currentCliente.realizarLocacao(locacao);
-                        } catch (LocacaoException ex) {
-                            JOptionPane.showMessageDialog(this, "Erro na locação: " + ex.getMessage());
-                            return;
-                        }
-                        JOptionPane.showMessageDialog(this, "Pagamento Realizado!\nAluguel cadastrado com sucesso!");
-                        cardLayout.show(cards, "entrar");
-                    } else {
-                        JOptionPane.showMessageDialog(this, "Aluguel cancelado.");
-                        cardLayout.show(cards, "clienteChoice");
-                    }
+                    currentCliente[0].realizarLocacao(locacao);
+                    selectedCarro[0].atualizarStatus(false);
+                    
+                    JOptionPane.showMessageDialog(LocacaoPanel.this, 
+                        "Locação realizada com sucesso!\nValor Total: R$ " + locacao.getValorTotal());
+                    dispose();
                 } catch (Exception ex) {
-                    JOptionPane.showMessageDialog(this, "Erro ao processar datas. Verifique o formato dd/mm/yyyy.");
+                    JOptionPane.showMessageDialog(LocacaoPanel.this, "Erro: " + ex.getMessage());
                 }
             });
-            btnVoltarDatas.addActionListener(e -> cardLayout.show(cards, "selecionarCarro"));
-            cards.add(panelDefinirDatas, "definirDatas");
+            
+            panel.add(new JLabel("Data Início:"));
+            panel.add(txtInicio);
+            panel.add(new JLabel("Data Fim:"));
+            panel.add(txtFim);
+            panel.add(btnVoltar);
+            panel.add(btnFinalizar);
+            return panel;
         }
     }
 
-    // -----------------------------
-    // ClientesPanel (para futuros aprimoramentos)
-    // -----------------------------
-    private static class ClientesPanel extends JPanel {
-        public ClientesPanel() {
-            setLayout(new BorderLayout());
-            add(new JLabel("Gerenciamento de Clientes", SwingConstants.CENTER));
-        }
-    }
-
-    // -----------------------------
-    // CarrosPanel (para futuros aprimoramentos)
-    // -----------------------------
-    private static class CarrosPanel extends JPanel {
-        public CarrosPanel() {
-            setLayout(new BorderLayout());
-            add(new JLabel("Gerenciamento de Carros", SwingConstants.CENTER));
+    private static class NovoClienteDialog extends JDialog {
+        public NovoClienteDialog(List<Cliente> clientes, DefaultTableModel model) {
+            setTitle("Novo Cliente");
+            setSize(300, 200);
+            setModal(true);
+            
+            JPanel panel = new JPanel(new GridLayout(4, 2));
+            JTextField txtNome = new JTextField();
+            JTextField txtCpf = new JTextField();
+            JTextField txtEmail = new JTextField();
+            
+            panel.add(new JLabel("Nome:"));
+            panel.add(txtNome);
+            panel.add(new JLabel("CPF:"));
+            panel.add(txtCpf);
+            panel.add(new JLabel("Email:"));
+            panel.add(txtEmail);
+            
+            JButton btnSalvar = new JButton("Salvar");
+            btnSalvar.addActionListener(e -> {
+                Cliente novo = new Cliente(
+                    clientes.size() + 1,
+                    txtNome.getText(),
+                    txtCpf.getText(),
+                    txtEmail.getText()
+                );
+                clientes.add(novo);
+                model.addRow(new Object[]{novo.getId(), novo.getNome(), novo.getCpf()});
+                dispose();
+            });
+            
+            panel.add(btnSalvar);
+            add(panel);
+            setVisible(true);
         }
     }
 }

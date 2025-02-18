@@ -12,6 +12,8 @@ public class Locacao {
     private Cliente cliente;
     private Carro carro;
     private CalculoDiaria calculoStrategy;
+    private Date dataDevolucao;
+    private boolean devolvido;
 
     public Locacao(int id, Date dataInicio, Date dataFim, Cliente cliente, 
                   Carro carro, CalculoDiaria calculoStrategy) {
@@ -22,6 +24,7 @@ public class Locacao {
         this.carro = carro;
         this.calculoStrategy = calculoStrategy;
         this.status = "Ativa";
+        this.devolvido = false;
     }
 
     public void calcularValorTotal() {
@@ -36,6 +39,13 @@ public class Locacao {
         calcularValorTotal();
     }
 
+    public void devolverCarro() {
+        this.devolvido = true;
+        this.dataDevolucao = new Date();
+        this.carro.atualizarStatus(true);
+    }
+
+    // Getters
     public int getId() { return id; }
     public Date getDataInicio() { return dataInicio; }
     public Date getDataFim() { return dataFim; }
@@ -43,4 +53,6 @@ public class Locacao {
     public String getStatus() { return status; }
     public Cliente getCliente() { return cliente; }
     public Carro getCarro() { return carro; }
+    public Date getDataDevolucao() { return dataDevolucao; }
+    public boolean isDevolvido() { return devolvido; }
 }
